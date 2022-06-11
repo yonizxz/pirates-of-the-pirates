@@ -181,13 +181,13 @@ class Pirates(arcade.Window):
 
     def on_key_press(self, symbol: int, modifiers: int):
         if symbol == arcade.key.RIGHT:
-            self._sail_angle_delta = self._sail_move_speed
-        elif symbol == arcade.key.LEFT:
             self._sail_angle_delta = -self._sail_move_speed
+        elif symbol == arcade.key.LEFT:
+            self._sail_angle_delta = self._sail_move_speed
         if symbol == arcade.key.D:
-            self._keel_angle_delta = self._keel_move_speed
-        elif symbol == arcade.key.A:
             self._keel_angle_delta = -self._keel_move_speed
+        elif symbol == arcade.key.A:
+            self._keel_angle_delta = self._keel_move_speed
 
     def on_key_release(self, symbol: int, modifiers: int):
         if symbol in [arcade.key.RIGHT, arcade.key.LEFT]:
