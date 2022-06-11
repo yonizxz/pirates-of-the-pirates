@@ -53,19 +53,26 @@ class Pirates(arcade.Window):
         mast_end_x = self._boat_x + math.cos(self._sail_angle) * self._mast_length
         mast_end_y = self._boat_y + math.sin(self._sail_angle) * self._mast_length
         arcade.draw_line(self._boat_x, self._boat_y, mast_end_x, mast_end_y, arcade.color.REDWOOD, 5)
+        mast_center_x = self._boat_x + math.cos(self._sail_angle) * self._mast_length / 2
+        mast_center_y = self._boat_y + math.sin(self._sail_angle) * self._mast_length / 2
+        sail_curve_tilt = self._sail_angle
+        if self._sail_angle < math.pi:
+            sail_curve_tilt += math.pi
+        arcade.draw_arc_outline(mast_center_x, mast_center_y, self._mast_length, self._lol[0] / 7.5, arcade.color.WHITE,
+                                0, 180, 5, tilt_angle=math.degrees(sail_curve_tilt))
 
         self._draw_borders()
         self._draw_waves()
         self._draw_wind_arrow()
 
         # wind drag
-        self._draw_arrow(self._boat_x, self._boat_y, self._lol[0], self._lol[1], arcade.color.BLACK, 5)
+        # self._draw_arrow(self._boat_x, self._boat_y, self._lol[0], self._lol[1], arcade.color.BLACK, 5)
         # wind lift
-        self._draw_arrow(self._boat_x, self._boat_y, self._lol[2], self._lol[3], arcade.color.PURPLE, 5)
+        # self._draw_arrow(self._boat_x, self._boat_y, self._lol[2], self._lol[3], arcade.color.PURPLE, 5)
         # water drag
-        self._draw_arrow(self._boat_x, self._boat_y, self._wut[0], self._wut[1], arcade.color.SILVER, 5)
+        # self._draw_arrow(self._boat_x, self._boat_y, self._wut[0], self._wut[1], arcade.color.SILVER, 5)
         # water lift
-        self._draw_arrow(self._boat_x, self._boat_y, self._wut[2], self._wut[3], arcade.color.YELLOW, 5)
+        # self._draw_arrow(self._boat_x, self._boat_y, self._wut[2], self._wut[3], arcade.color.YELLOW, 5)
 
     def _draw_wind_arrow(self):
         center_x = self._wind_arrow_length * 2
