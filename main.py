@@ -58,7 +58,7 @@ class Pirates(arcade.Window):
         sail_curve_tilt = self._sail_angle
         if self._sail_angle < math.pi:
             sail_curve_tilt += math.pi
-        arcade.draw_arc_outline(mast_center_x, mast_center_y, self._mast_length, self._lol[0] / 7.5, arcade.color.WHITE,
+        arcade.draw_arc_outline(mast_center_x, mast_center_y, self._mast_length, sum(self._lol[:2]) / 7.5, arcade.color.WHITE,
                                 0, 180, 5, tilt_angle=math.degrees(sail_curve_tilt))
 
         self._draw_borders()
