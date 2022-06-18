@@ -1,12 +1,19 @@
 import math
 import arcade
 import numpy as np
+import enum
 
-from sail_force import lift_coef, drag_coef
+from sail_force import lift_coef, drag_coef, Force
 
 SCREEN_WIDTH = 1300
 SCREEN_HEIGHT = 750
 BACKGROUND_COLOR = arcade.color.OCEAN_BOAT_BLUE
+
+
+class HelpModes(enum.Enum):
+    NO_HELP = 0
+    WIND = 1
+    ALL = 2
 
 
 class Pirates(arcade.Window):
@@ -40,8 +47,11 @@ class Pirates(arcade.Window):
         self._wind_angle = 0
         self._wind_speed = 50
         self._wind_arrow_length = 70
-        self._lol = [0,0,0,0]
-        self._wut = [0,0,0,0]
+        self._help_mode = HelpModes.NO_HELP
+        self._wind_drag = Force(0, 0)
+        self._wind_lift = Force(0, 0)
+        self._water_drag = Force(0, 0)
+        self._water_lift = Force(0, 0)
 
     def setup(self):
         pass
@@ -53,15 +63,19 @@ class Pirates(arcade.Window):
         self._draw_boat()
         self._draw_borders()
         self._draw_wind_arrow()
+        self._draw_force_scaffolds()
 
-        # wind drag
-        # self._draw_arrow(self._boat_x, self._boat_y, self._lol[0], self._lol[1], arcade.color.BLACK, 5)
-        # wind lift
-        # self._draw_arrow(self._boat_x, self._boat_y, self._lol[2], self._lol[3], arcade.color.PURPLE, 5)
-        # water drag
-        # self._draw_arrow(self._boat_x, self._boat_y, self._wut[0], self._wut[1], arcade.color.SILVER, 5)
-        # water lift
-        # self._draw_arrow(self._boat_x, self._boat_y, self._wut[2], self._wut[3], arcade.color.YELLOW, 5)
+    def _draw_force_scaffolds(self):
+        if self._help_mode == HelpModes.WIND or self._help_mode == HelpModes.ALL:
+            self._draw_arrow(self._boat_x, self._boat_y, self._wind_drag.size, self._wind_drag.angle,
+                             arcade.color.BLACK, 5, "Wind drag")
+            self._draw_arrow(self._boat_x, self._boat_y, self._wind_lift.size, self._wind_lift.angle,
+                             arcade.color.PURPLE, 5, "Wind lift")
+        if self._help_mode == HelpModes.ALL:
+            self._draw_arrow(self._boat_x, self._boat_y, self._water_drag.size, self._water_drag.angle,
+                             arcade.color.SILVER, 5, "Water drag")
+            self._draw_arrow(self._boat_x, self._boat_y, self._water_lift.size, self._water_lift.angle,
+                             arcade.color.YELLOW, 5, "Water lift")
 
     def _draw_boat(self):
         keel_end_x = self._boat_x + math.cos(self._keel_angle) * self._keel_length
@@ -83,7 +97,7 @@ class Pirates(arcade.Window):
         sail_curve_tilt = self._sail_angle
         if not (0 < angle_diff < math.pi):
             sail_curve_tilt += math.pi
-        arcade.draw_arc_outline(mast_center_x, mast_center_y, sail_length, sum(self._lol[:2]) / 7.5,
+        arcade.draw_arc_outline(mast_center_x, mast_center_y, sail_length, self._wind_drag.size / 7.5,
                                 arcade.color.WHITE,
                                 0, 180, 5, tilt_angle=math.degrees(sail_curve_tilt))
 
@@ -94,7 +108,7 @@ class Pirates(arcade.Window):
         self._draw_arrow(center_x, center_y, self._wind_arrow_length, self._wind_angle, arcade.color.METALLIC_SUNBURST, 5)
 
     @staticmethod
-    def _draw_arrow(center_x, center_y, length, angle, color, width):
+    def _draw_arrow(center_x, center_y, length, angle, color, width, text=""):
         arcade.draw_line(center_x + (length / 2) * math.cos(angle),
                          center_y + (length / 2) * math.sin(angle),
                          center_x - (length / 2) * math.cos(angle),
@@ -107,6 +121,11 @@ class Pirates(arcade.Window):
                                     center_x + (length / 3) * math.cos(angle + math.pi / 8),
                                     center_y + (length / 3) * math.sin(angle + math.pi / 8),
                                     color)
+
+        arcade.draw_text(text,
+                         center_x + (length / 2) * math.cos(angle) + 3,
+                         center_y + (length / 2) * math.sin(angle) + 3,
+                         color)
 
     def _draw_waves(self):
 
@@ -173,12 +192,11 @@ class Pirates(arcade.Window):
         water_speed = math.sqrt(self._speed_x ** 2 + self._speed_y ** 2)
         water_drag_x, water_drag_y, water_lift_x, water_lift_y = self._get_lift_and_drag(water_angle, water_speed, self._keel_angle)
 
-        self._lol = [math.sqrt(wind_drag_x ** 2 + wind_drag_y ** 2), math.atan2(wind_drag_y, wind_drag_x),
-                     math.sqrt(wind_lift_x ** 2 + wind_lift_y ** 2), math.atan2(wind_lift_y, wind_lift_x)]
-        self._wut = [math.sqrt(water_drag_x ** 2 + water_drag_y ** 2), math.atan2(water_drag_y, water_drag_x),
-                     math.sqrt(water_lift_x ** 2 + water_lift_y ** 2), math.atan2(water_lift_y, water_lift_x)]
+        self._wind_drag = Force.from_cartesian(wind_drag_x, wind_drag_y)
+        self._wind_lift = Force.from_cartesian(wind_lift_x, wind_lift_y)
+        self._water_drag = Force.from_cartesian(water_drag_x, water_drag_y)
+        self._water_lift = Force.from_cartesian(water_lift_x, water_lift_y)
 
-        # print(wind_drag_x, wind_drag_y, wind_lift_x, wind_lift_y, water_drag_x, water_drag_y, water_lift_x, water_lift_y)
         total_force_x = (wind_drag_x + wind_lift_x + water_drag_x + water_lift_x) / 100
         total_force_y = (wind_drag_y + wind_lift_y + water_drag_y + water_lift_y) / 100
 
@@ -218,6 +236,8 @@ class Pirates(arcade.Window):
             self._keel_angle_delta = -self._keel_move_speed
         elif symbol == arcade.key.A:
             self._keel_angle_delta = self._keel_move_speed
+        elif symbol == arcade.key.SPACE:
+            self._help_mode = HelpModes((self._help_mode.value + 1) % len(HelpModes))
 
     def on_key_release(self, symbol: int, modifiers: int):
         if symbol in [arcade.key.RIGHT, arcade.key.LEFT]:
