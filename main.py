@@ -13,15 +13,18 @@ class Pirates(arcade.Window):
     def __init__(self, width, height):
         super().__init__(width, height)
         arcade.set_background_color(BACKGROUND_COLOR)
-        self._sail_angle = 0# math.pi * 3 / 2
+        self._sail_angle = 0
+        self._sail_openness = 1
         self._keel_angle = math.pi
         self._boat_x = width / 2
         self._boat_y = height / 2
         self._sail_angle_delta = 0
+        self._sail_openness_delta = 0
         self._keel_angle_delta = 0
         self._mast_length = 60
         self._keel_length = 35
         self._sail_move_speed = 3
+        self._sail_open_speed = 0.35
         self._keel_move_speed = 3
         self._move_angle = 0
         self._move_speed = 0
@@ -71,15 +74,16 @@ class Pirates(arcade.Window):
         self._draw_sail()
 
     def _draw_sail(self):
-        mast_center_x = self._boat_x + math.cos(self._sail_angle) * self._mast_length / 2
-        mast_center_y = self._boat_y + math.sin(self._sail_angle) * self._mast_length / 2
+        sail_length = self._mast_length * self._sail_openness
+        mast_center_x = self._boat_x + math.cos(self._sail_angle) * sail_length / 2
+        mast_center_y = self._boat_y + math.sin(self._sail_angle) * sail_length / 2
         angle_diff = self._wind_angle - self._sail_angle
         if angle_diff < -math.pi:
             angle_diff += 2 * math.pi
         sail_curve_tilt = self._sail_angle
         if not (0 < angle_diff < math.pi):
             sail_curve_tilt += math.pi
-        arcade.draw_arc_outline(mast_center_x, mast_center_y, self._mast_length, sum(self._lol[:2]) / 7.5,
+        arcade.draw_arc_outline(mast_center_x, mast_center_y, sail_length, sum(self._lol[:2]) / 7.5,
                                 arcade.color.WHITE,
                                 0, 180, 5, tilt_angle=math.degrees(sail_curve_tilt))
 
@@ -140,6 +144,9 @@ class Pirates(arcade.Window):
         elif self._sail_angle < 0:
             self._sail_angle += math.pi * 2
 
+        if 0 < self._sail_openness + self._sail_openness_delta * delta_time < 1:
+            self._sail_openness += self._sail_openness_delta * delta_time
+
         self._keel_angle += self._keel_angle_delta * delta_time
         if self._keel_angle > math.pi * 2:
             self._keel_angle -= math.pi * 2
@@ -157,7 +164,10 @@ class Pirates(arcade.Window):
         apparent_wind_y = self._wind_speed * math.sin(self._wind_angle) - self._speed_y
         apparent_wind_angle = math.atan2(apparent_wind_y, apparent_wind_x)
         apparent_wind_speed = math.sqrt(apparent_wind_x ** 2 + apparent_wind_y ** 2)
-        wind_drag_x, wind_drag_y, wind_lift_x, wind_lift_y = self._get_lift_and_drag(apparent_wind_angle, apparent_wind_speed, self._sail_angle)
+        wind_drag_x, wind_drag_y, wind_lift_x, wind_lift_y = self._get_lift_and_drag(apparent_wind_angle,
+                                                                                     apparent_wind_speed,
+                                                                                     self._sail_angle,
+                                                                                     self._sail_openness)
 
         water_angle = math.atan2(-self._speed_y, -self._speed_x)
         water_speed = math.sqrt(self._speed_x ** 2 + self._speed_y ** 2)
@@ -178,18 +188,18 @@ class Pirates(arcade.Window):
 
         return self._speed_x + total_force_x, self._speed_y + total_force_y
 
-    def _get_lift_and_drag(self, resistance_angle, resistance_speed, wing_angle):
+    def _get_lift_and_drag(self, resistance_angle, resistance_speed, wing_angle, gating=1):
         attack_angle = resistance_angle - wing_angle + math.pi
         if attack_angle > math.pi:
             attack_angle -= math.pi * 2
         elif attack_angle < -math.pi:
             attack_angle += math.pi * 2
-        drag_x = (resistance_speed ** 2) * drag_coef(abs(attack_angle)) * math.cos(resistance_angle)
-        drag_y = (resistance_speed ** 2) * drag_coef(abs(attack_angle)) * math.sin(resistance_angle)
+        drag_x = (resistance_speed ** 2) * drag_coef(abs(attack_angle)) * math.cos(resistance_angle) * gating
+        drag_y = (resistance_speed ** 2) * drag_coef(abs(attack_angle)) * math.sin(resistance_angle) * gating
         lift_x = (resistance_speed ** 2) * lift_coef(abs(attack_angle)) * \
-            math.cos(resistance_angle + math.copysign(math.pi / 2, attack_angle))
+                 math.cos(resistance_angle + math.copysign(math.pi / 2, attack_angle)) * gating
         lift_y = (resistance_speed ** 2) * lift_coef(abs(attack_angle)) * \
-            math.sin(resistance_angle + math.copysign(math.pi / 2, attack_angle))
+                 math.sin(resistance_angle + math.copysign(math.pi / 2, attack_angle)) * gating
         return [self._cap_to_wind_speed(i) for i in [drag_x, drag_y, lift_x, lift_y]]
 
     def _cap_to_wind_speed(self, speed):
@@ -200,7 +210,11 @@ class Pirates(arcade.Window):
             self._sail_angle_delta = -self._sail_move_speed
         elif symbol == arcade.key.LEFT:
             self._sail_angle_delta = self._sail_move_speed
-        if symbol == arcade.key.D:
+        elif symbol == arcade.key.UP:
+            self._sail_openness_delta = self._sail_open_speed
+        elif symbol == arcade.key.DOWN:
+            self._sail_openness_delta = -self._sail_open_speed
+        elif symbol == arcade.key.D:
             self._keel_angle_delta = -self._keel_move_speed
         elif symbol == arcade.key.A:
             self._keel_angle_delta = self._keel_move_speed
@@ -208,6 +222,8 @@ class Pirates(arcade.Window):
     def on_key_release(self, symbol: int, modifiers: int):
         if symbol in [arcade.key.RIGHT, arcade.key.LEFT]:
             self._sail_angle_delta = 0
+        elif symbol in [arcade.key.UP, arcade.key.DOWN]:
+            self._sail_openness_delta = 0
         elif symbol in [arcade.key.A, arcade.key.D]:
             self._keel_angle_delta = 0
 
