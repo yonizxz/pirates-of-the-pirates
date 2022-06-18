@@ -1,4 +1,7 @@
 import math
+import random
+import time
+
 import arcade
 import numpy as np
 import enum
@@ -52,6 +55,13 @@ class Pirates(arcade.Window):
         self._wind_lift = Force(0, 0)
         self._water_drag = Force(0, 0)
         self._water_lift = Force(0, 0)
+        self._litters = []
+        self._litter_spawn_rate = 10
+        self._last_spawn_time = 0
+        self._reach_distance = 30
+        self._last_collect_time = 0
+        self._collect_message_display_time = 1
+        self._score = 0
 
     def setup(self):
         pass
@@ -60,10 +70,28 @@ class Pirates(arcade.Window):
         """ Render the screen. """
         arcade.start_render()
         self._draw_waves()
+        self._draw_litter()
         self._draw_boat()
         self._draw_borders()
         self._draw_wind_arrow()
         self._draw_force_scaffolds()
+        self._draw_messages()
+        self._draw_score()
+
+    def _draw_score(self):
+        arcade.draw_text(" {}".format(self._score), 300, self.height - 100)
+
+    def _draw_messages(self):
+        if time.time() - self._last_collect_time < self._collect_message_display_time:
+            arcade.draw_text(" +100", self._boat_x * 1.05, self._boat_y * 1.05, arcade.color.GREEN, bold=True)
+
+    def _draw_litter(self):
+        for litter in self._litters:
+            if (self._location_x - (self.width / 2) < litter[0] < self._location_x + (self.width / 2) and
+                    self._location_y - (self.height / 2) < litter[1] < self._location_y + (self.height / 2)):
+                arcade.draw_circle_filled(litter[0] - (self._location_x - (self.width / 2)),
+                                          litter[1] - (self._location_y - (self.height / 2)),
+                                          8, arcade.color.BULGARIAN_ROSE)
 
     def _draw_force_scaffolds(self):
         if self._help_mode == HelpModes.WIND or self._help_mode == HelpModes.ALL:
@@ -157,26 +185,37 @@ class Pirates(arcade.Window):
                                               arcade.color.DARK_BROWN)
 
     def update(self, delta_time):
-        self._sail_angle += self._sail_angle_delta * delta_time
-        if self._sail_angle > math.pi * 2:
-            self._sail_angle -= math.pi * 2
-        elif self._sail_angle < 0:
-            self._sail_angle += math.pi * 2
-
-        if 0 < self._sail_openness + self._sail_openness_delta * delta_time < 1:
-            self._sail_openness += self._sail_openness_delta * delta_time
-
-        self._keel_angle += self._keel_angle_delta * delta_time
-        if self._keel_angle > math.pi * 2:
-            self._keel_angle -= math.pi * 2
-        elif self._keel_angle < 0:
-            self._keel_angle += math.pi * 2
+        self._sail_angle = self._cap_angle(self._sail_angle + self._sail_angle_delta * delta_time)
+        self._sail_openness = np.clip(self._sail_openness + self._sail_openness_delta * delta_time, 0, 1)
+        self._keel_angle = self._cap_angle(self._keel_angle + self._keel_angle_delta * delta_time)
 
         self._speed_x, self._speed_y = self._calculate_speed()
-        if 20 < self._location_x + self._speed_x < self._map_width - 20:
-            self._location_x += self._speed_x * delta_time * 10
-        if 20 < self._location_y + self._speed_y < self._map_height - 20:
-            self._location_y += self._speed_y * delta_time * 10
+        self._location_x = np.clip(self._location_x + self._speed_x * delta_time * 10, 20, self._map_width - 20)
+        self._location_y = np.clip(self._location_y + self._speed_y * delta_time * 10, 20, self._map_height - 20)
+
+        self._spawn_litter()
+        self._litter_interaction()
+
+    def _litter_interaction(self):
+        for litter in self._litters:
+            if math.dist(litter, (self._location_x, self._location_y)) < self._reach_distance:
+                self._litters.remove(litter)
+                self._last_collect_time = time.time()
+                self._score += 100
+
+    def _spawn_litter(self):
+        if time.time() - self._last_spawn_time > self._litter_spawn_rate:
+            litter = (random.random() * self._map_width, random.random() * self._map_height)
+            self._litters.append(litter)
+            self._last_spawn_time = time.time()
+
+    @staticmethod
+    def _cap_angle(angle):
+        if angle > math.pi * 2:
+            angle -= math.pi * 2
+        elif angle < 0:
+            angle += math.pi * 2
+        return angle
 
     def _calculate_speed(self):
         apparent_wind_x = self._wind_speed * math.cos(self._wind_angle) - self._speed_x
