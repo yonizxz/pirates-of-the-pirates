@@ -34,7 +34,7 @@ class Pirates(arcade.Window):
         self._wave_y_coords = np.arange(0, self._map_height, self._wave_margin)
         self._speed_x = 0
         self._speed_y = 0
-        self._wind_angle = 0#math.pi / 4
+        self._wind_angle = 0
         self._wind_speed = 50
         self._wind_arrow_length = 70
         self._lol = [0,0,0,0]
@@ -46,23 +46,9 @@ class Pirates(arcade.Window):
     def on_draw(self):
         """ Render the screen. """
         arcade.start_render()
-        keel_end_x = self._boat_x + math.cos(self._keel_angle) * self._keel_length
-        keel_end_y = self._boat_y + math.sin(self._keel_angle) * self._keel_length
-        arcade.draw_line(self._boat_x, self._boat_y, keel_end_x, keel_end_y, arcade.color.DARK_BROWN, 10)
-        arcade.draw_circle_filled(self._boat_x, self._boat_y, 20, arcade.color.NAVY_BLUE)
-        mast_end_x = self._boat_x + math.cos(self._sail_angle) * self._mast_length
-        mast_end_y = self._boat_y + math.sin(self._sail_angle) * self._mast_length
-        arcade.draw_line(self._boat_x, self._boat_y, mast_end_x, mast_end_y, arcade.color.REDWOOD, 5)
-        mast_center_x = self._boat_x + math.cos(self._sail_angle) * self._mast_length / 2
-        mast_center_y = self._boat_y + math.sin(self._sail_angle) * self._mast_length / 2
-        sail_curve_tilt = self._sail_angle
-        if self._sail_angle < math.pi:
-            sail_curve_tilt += math.pi
-        arcade.draw_arc_outline(mast_center_x, mast_center_y, self._mast_length, sum(self._lol[:2]) / 7.5, arcade.color.WHITE,
-                                0, 180, 5, tilt_angle=math.degrees(sail_curve_tilt))
-
-        self._draw_borders()
         self._draw_waves()
+        self._draw_boat()
+        self._draw_borders()
         self._draw_wind_arrow()
 
         # wind drag
@@ -73,6 +59,29 @@ class Pirates(arcade.Window):
         # self._draw_arrow(self._boat_x, self._boat_y, self._wut[0], self._wut[1], arcade.color.SILVER, 5)
         # water lift
         # self._draw_arrow(self._boat_x, self._boat_y, self._wut[2], self._wut[3], arcade.color.YELLOW, 5)
+
+    def _draw_boat(self):
+        keel_end_x = self._boat_x + math.cos(self._keel_angle) * self._keel_length
+        keel_end_y = self._boat_y + math.sin(self._keel_angle) * self._keel_length
+        arcade.draw_line(self._boat_x, self._boat_y, keel_end_x, keel_end_y, arcade.color.DARK_BROWN, 10)
+        arcade.draw_circle_filled(self._boat_x, self._boat_y, 20, arcade.color.NAVY_BLUE)
+        mast_end_x = self._boat_x + math.cos(self._sail_angle) * self._mast_length
+        mast_end_y = self._boat_y + math.sin(self._sail_angle) * self._mast_length
+        arcade.draw_line(self._boat_x, self._boat_y, mast_end_x, mast_end_y, arcade.color.REDWOOD, 5)
+        self._draw_sail()
+
+    def _draw_sail(self):
+        mast_center_x = self._boat_x + math.cos(self._sail_angle) * self._mast_length / 2
+        mast_center_y = self._boat_y + math.sin(self._sail_angle) * self._mast_length / 2
+        angle_diff = self._wind_angle - self._sail_angle
+        if angle_diff < -math.pi:
+            angle_diff += 2 * math.pi
+        sail_curve_tilt = self._sail_angle
+        if not (0 < angle_diff < math.pi):
+            sail_curve_tilt += math.pi
+        arcade.draw_arc_outline(mast_center_x, mast_center_y, self._mast_length, sum(self._lol[:2]) / 7.5,
+                                arcade.color.WHITE,
+                                0, 180, 5, tilt_angle=math.degrees(sail_curve_tilt))
 
     def _draw_wind_arrow(self):
         center_x = self._wind_arrow_length * 2
