@@ -6,7 +6,9 @@ import arcade
 import numpy as np
 import enum
 
+from onscreen_text import OnscreenText
 from sail_force import lift_coef, drag_coef, Force
+from stage import Stage, BoatInitParams
 
 SCREEN_WIDTH = 1300
 SCREEN_HEIGHT = 750
@@ -20,9 +22,14 @@ class HelpModes(enum.Enum):
 
 
 class Pirates(arcade.Window):
-    def __init__(self, width, height):
+    def __init__(self, width, height, stages):
         super().__init__(width, height)
         arcade.set_background_color(BACKGROUND_COLOR)
+        self._stages = stages
+        self._stage = stages[0]
+        self._stage_index = 0
+        self._is_started = False
+        self._is_finished = False
         self._sail_angle = 0
         self._sail_openness = 1
         self._keel_angle = math.pi
@@ -38,13 +45,11 @@ class Pirates(arcade.Window):
         self._keel_move_speed = 3
         self._move_angle = 0
         self._move_speed = 0
-        self._map_width = width * 2
-        self._map_height = height * 2
-        self._location_x = self._map_width / 2
-        self._location_y = self._map_height / 2
+        self._location_x = 0
+        self._location_y = 0
         self._wave_margin = width / 10
-        self._wave_x_coords = np.arange(0, self._map_width, self._wave_margin)
-        self._wave_y_coords = np.arange(0, self._map_height, self._wave_margin)
+        self._wave_x_coords = np.arange(0, self._stage.map_width, self._wave_margin)
+        self._wave_y_coords = np.arange(0, self._stage.map_height, self._wave_margin)
         self._speed_x = 0
         self._speed_y = 0
         self._wind_angle = 0
@@ -56,19 +61,22 @@ class Pirates(arcade.Window):
         self._water_drag = Force(0, 0)
         self._water_lift = Force(0, 0)
         self._litters = []
-        self._litter_spawn_rate = 10
         self._last_spawn_time = 0
         self._reach_distance = 30
         self._last_collect_time = 0
         self._collect_message_display_time = 1
         self._score = 0
 
-    def setup(self):
-        pass
-
     def on_draw(self):
         """ Render the screen. """
         arcade.start_render()
+        if not self._is_started:
+            if self._is_finished:
+                self._draw_end_screen()
+            else:
+                self._draw_intro_screen()
+            return
+
         self._draw_waves()
         self._draw_litter()
         self._draw_boat()
@@ -77,6 +85,25 @@ class Pirates(arcade.Window):
         self._draw_force_scaffolds()
         self._draw_messages()
         self._draw_score()
+        self._draw_onscreen_texts()
+
+    def _draw_onscreen_texts(self):
+        for text in self._stage.stage_texts:
+            if self._is_location_in_screen_visibility(text.location_x, text.location_y):
+                arcade.draw_text(text.text,
+                                 text.location_x - (self._location_x - (self.width / 2)),
+                                 text.location_y - (self._location_y - (self.height / 2)),
+                                 font_size=text.size)
+
+    def _is_location_in_screen_visibility(self, location_x, location_y):
+        return (self._location_x - (self.width / 2) < location_x < self._location_x + (self.width / 2) and
+                self._location_y - (self.height / 2) < location_y < self._location_y + (self.height / 2))
+
+    def _draw_intro_screen(self):
+        arcade.draw_text(self._stage.intro_text, self.width * 1.5 / 5, self.height / 2, width=self.width / 2, font_size=20, multiline=True)
+
+    def _draw_end_screen(self):
+        arcade.draw_text("That's all\nThanks for playing!", self.width * 2 / 5, self.height / 2, width=self.width / 2, font_size=20, multiline=True)
 
     def _draw_score(self):
         arcade.draw_text(" {}".format(self._score), 300, self.height - 100)
@@ -87,8 +114,7 @@ class Pirates(arcade.Window):
 
     def _draw_litter(self):
         for litter in self._litters:
-            if (self._location_x - (self.width / 2) < litter[0] < self._location_x + (self.width / 2) and
-                    self._location_y - (self.height / 2) < litter[1] < self._location_y + (self.height / 2)):
+            if self._is_location_in_screen_visibility(litter[0], litter[1]):
                 arcade.draw_circle_filled(litter[0] - (self._location_x - (self.width / 2)),
                                           litter[1] - (self._location_y - (self.height / 2)),
                                           8, arcade.color.BULGARIAN_ROSE)
@@ -106,9 +132,10 @@ class Pirates(arcade.Window):
                              arcade.color.YELLOW, 5, "Water lift")
 
     def _draw_boat(self):
-        keel_end_x = self._boat_x + math.cos(self._keel_angle) * self._keel_length
-        keel_end_y = self._boat_y + math.sin(self._keel_angle) * self._keel_length
-        arcade.draw_line(self._boat_x, self._boat_y, keel_end_x, keel_end_y, arcade.color.DARK_BROWN, 10)
+        if self._stage.has_keel:
+            keel_end_x = self._boat_x + math.cos(self._keel_angle) * self._keel_length
+            keel_end_y = self._boat_y + math.sin(self._keel_angle) * self._keel_length
+            arcade.draw_line(self._boat_x, self._boat_y, keel_end_x, keel_end_y, arcade.color.DARK_BROWN, 10)
         arcade.draw_circle_filled(self._boat_x, self._boat_y, 20, arcade.color.NAVY_BLUE)
         mast_end_x = self._boat_x + math.cos(self._sail_angle) * self._mast_length
         mast_end_y = self._boat_y + math.sin(self._sail_angle) * self._mast_length
@@ -169,32 +196,40 @@ class Pirates(arcade.Window):
                                           5, arcade.color.WHITE_SMOKE)
 
     def _draw_borders(self):
-        relative_x = self._map_width - self._location_x
+        relative_x = self._stage.map_width - self._location_x
         if relative_x < (self.width / 2):
             arcade.draw_xywh_rectangle_filled((self.width / 2) + relative_x, 0, (self.width / 2) - relative_x,
                                               self.height, arcade.color.DARK_BROWN)
-        elif self._location_x < (self.width / 2):
+        if self._location_x < (self.width / 2):
             arcade.draw_xywh_rectangle_filled(0, 0, (self.width / 2) - self._location_x, self.height,
                                               arcade.color.DARK_BROWN)
-        relative_y = self._map_height - self._location_y
+        relative_y = self._stage.map_height - self._location_y
         if relative_y < (self.height / 2):
             arcade.draw_xywh_rectangle_filled(0, (self.height / 2) + relative_y, self.width,
                                               (self.height / 2) - relative_y, arcade.color.DARK_BROWN)
-        elif self._location_y < (self.height / 2):
+        if self._location_y < (self.height / 2):
             arcade.draw_xywh_rectangle_filled(0, 0, self.width, (self.height / 2) - self._location_y,
                                               arcade.color.DARK_BROWN)
 
     def update(self, delta_time):
+        if not self._is_started:
+            return
+        elif self._stage.end_condition(self):
+            self._end_stage()
+            return
+
         self._sail_angle = self._cap_angle(self._sail_angle + self._sail_angle_delta * delta_time)
         self._sail_openness = np.clip(self._sail_openness + self._sail_openness_delta * delta_time, 0, 1)
-        self._keel_angle = self._cap_angle(self._keel_angle + self._keel_angle_delta * delta_time)
+        if self._stage.has_keel:
+            self._keel_angle = self._cap_angle(self._keel_angle + self._keel_angle_delta * delta_time)
 
         self._speed_x, self._speed_y = self._calculate_speed()
-        self._location_x = np.clip(self._location_x + self._speed_x * delta_time * 10, 20, self._map_width - 20)
-        self._location_y = np.clip(self._location_y + self._speed_y * delta_time * 10, 20, self._map_height - 20)
+        self._location_x = np.clip(self._location_x + self._speed_x * delta_time * 10, 20, self._stage.map_width - 20)
+        self._location_y = np.clip(self._location_y + self._speed_y * delta_time * 10, 20, self._stage.map_height - 20)
 
-        self._spawn_litter()
-        self._litter_interaction()
+        if self._stage.has_litter:
+            self._spawn_litter()
+            self._litter_interaction()
 
     def _litter_interaction(self):
         for litter in self._litters:
@@ -204,8 +239,8 @@ class Pirates(arcade.Window):
                 self._score += 100
 
     def _spawn_litter(self):
-        if time.time() - self._last_spawn_time > self._litter_spawn_rate:
-            litter = (random.random() * self._map_width, random.random() * self._map_height)
+        if time.time() - self._last_spawn_time > self._stage.litter_spawn_rate:
+            litter = (random.random() * self._stage.map_width, random.random() * self._stage.map_height)
             self._litters.append(litter)
             self._last_spawn_time = time.time()
 
@@ -225,11 +260,14 @@ class Pirates(arcade.Window):
         wind_drag_x, wind_drag_y, wind_lift_x, wind_lift_y = self._get_lift_and_drag(apparent_wind_angle,
                                                                                      apparent_wind_speed,
                                                                                      self._sail_angle,
-                                                                                     self._sail_openness)
+                                                                                     self._sail_openness ** 2)
 
         water_angle = math.atan2(-self._speed_y, -self._speed_x)
         water_speed = math.sqrt(self._speed_x ** 2 + self._speed_y ** 2)
-        water_drag_x, water_drag_y, water_lift_x, water_lift_y = self._get_lift_and_drag(water_angle, water_speed, self._keel_angle)
+        if self._stage.has_keel:
+            water_drag_x, water_drag_y, water_lift_x, water_lift_y = self._get_lift_and_drag(water_angle, water_speed, self._keel_angle)
+        else:
+            water_drag_x, water_drag_y, water_lift_x, water_lift_y = [0, 0, 0, 0]
 
         self._wind_drag = Force.from_cartesian(wind_drag_x, wind_drag_y)
         self._wind_lift = Force.from_cartesian(wind_lift_x, wind_lift_y)
@@ -263,6 +301,11 @@ class Pirates(arcade.Window):
         return math.copysign(min(abs(speed), abs(self._wind_speed * 10)), speed)
 
     def on_key_press(self, symbol: int, modifiers: int):
+        if not self._is_started and not self._is_finished:
+            if symbol == arcade.key.SPACE:
+                self._start_stage()
+            return
+
         if symbol == arcade.key.RIGHT:
             self._sail_angle_delta = -self._sail_move_speed
         elif symbol == arcade.key.LEFT:
@@ -275,8 +318,23 @@ class Pirates(arcade.Window):
             self._keel_angle_delta = -self._keel_move_speed
         elif symbol == arcade.key.A:
             self._keel_angle_delta = self._keel_move_speed
-        elif symbol == arcade.key.SPACE:
+        elif symbol == arcade.key.H:
             self._help_mode = HelpModes((self._help_mode.value + 1) % len(HelpModes))
+
+    def _start_stage(self):
+        self._location_x = self._stage.boat_init_params.location_x
+        self._location_y = self._stage.boat_init_params.location_y
+        self._sail_angle = self._stage.boat_init_params.sail_angel
+        self._sail_openness = self._stage.boat_init_params.sail_openness
+        self._is_started = True
+
+    def _end_stage(self):
+        self._is_started = False
+        self._stage_index += 1
+        if self._stage_index < len(self._stages):
+            self._stage = self._stages[self._stage_index]
+        else:
+            self._is_finished = True
 
     def on_key_release(self, symbol: int, modifiers: int):
         if symbol in [arcade.key.RIGHT, arcade.key.LEFT]:
@@ -286,10 +344,32 @@ class Pirates(arcade.Window):
         elif symbol in [arcade.key.A, arcade.key.D]:
             self._keel_angle_delta = 0
 
+    def is_at_the_end_of_horizontal_stage(self):
+        return self._location_x > self._stage.map_width * 9 / 10
+
 
 def main():
-    game = Pirates(SCREEN_WIDTH, SCREEN_HEIGHT)
-    game.setup()
+    stage1_texts = [
+        OnscreenText("Use the left and right arrows to move the sail", -SCREEN_WIDTH / 10, SCREEN_HEIGHT * 2.3 / 4, 20),
+        OnscreenText("There you go, keep going!", SCREEN_WIDTH * 2, SCREEN_HEIGHT * 2.3 / 4, 20),
+    ]
+    stage1 = Stage(SCREEN_WIDTH * 4, SCREEN_HEIGHT / 2, BoatInitParams(SCREEN_WIDTH / 10, SCREEN_HEIGHT / 4), False,
+                    False, "Welcome to the game!\nPress space to start", stage1_texts,
+                    Pirates.is_at_the_end_of_horizontal_stage)
+    stage2_texts = [
+        OnscreenText("Use the up and down arrows to open/close the sail", -SCREEN_WIDTH / 10, SCREEN_HEIGHT * 2.3 / 4, 20),
+    ]
+    stage2 = Stage(SCREEN_WIDTH * 3, SCREEN_HEIGHT / 2, BoatInitParams(SCREEN_WIDTH / 10, SCREEN_HEIGHT / 4, 0, math.pi / 2),
+                   False, False, "Well done!\nPress space to go to the next stage", stage2_texts,
+                   Pirates.is_at_the_end_of_horizontal_stage)
+    stage3_texts = [
+        OnscreenText("Use A and D to move the fin", -SCREEN_WIDTH / 10, SCREEN_HEIGHT * 2.3 / 4, 20),
+        OnscreenText("Try to collect the litter!", SCREEN_WIDTH * 1.5, SCREEN_HEIGHT * 2.3 / 4, 20),
+    ]
+    stage3 = Stage(SCREEN_WIDTH * 6, SCREEN_HEIGHT / 2, BoatInitParams(SCREEN_WIDTH / 10, SCREEN_HEIGHT / 4), True,
+                   True, "Noice!\nNow we'll introduce another part of the boat: the fin", stage3_texts,
+                   Pirates.is_at_the_end_of_horizontal_stage, 1.5)
+    game = Pirates(SCREEN_WIDTH, SCREEN_HEIGHT, [stage1, stage2, stage3])
     arcade.run()
 
 
