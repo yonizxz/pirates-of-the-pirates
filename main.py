@@ -48,8 +48,8 @@ class Pirates(arcade.Window):
         self._location_x = 0
         self._location_y = 0
         self._wave_margin = width / 10
-        self._wave_x_coords = np.arange(0, self._stage.map_width, self._wave_margin)
-        self._wave_y_coords = np.arange(0, self._stage.map_height, self._wave_margin)
+        self._wave_x_coords = []
+        self._wave_y_coords = []
         self._speed_x = 0
         self._speed_y = 0
         self._wind_angle = 0
@@ -93,17 +93,17 @@ class Pirates(arcade.Window):
                 arcade.draw_text(text.text,
                                  text.location_x - (self._location_x - (self.width / 2)),
                                  text.location_y - (self._location_y - (self.height / 2)),
-                                 font_size=text.size)
+                                 font_size=text.size, **text.kwargs)
 
     def _is_location_in_screen_visibility(self, location_x, location_y):
         return (self._location_x - (self.width / 2) < location_x < self._location_x + (self.width / 2) and
                 self._location_y - (self.height / 2) < location_y < self._location_y + (self.height / 2))
 
     def _draw_intro_screen(self):
-        arcade.draw_text(self._stage.intro_text, self.width * 1.5 / 5, self.height / 2, width=self.width / 2, font_size=20, multiline=True)
+        arcade.draw_text(self._stage.intro_text, self.width * 2 / 5, self.height / 2, width=self.width / 2, font_size=20, multiline=True)
 
     def _draw_end_screen(self):
-        arcade.draw_text("That's all\nThanks for playing!", self.width * 2 / 5, self.height / 2, width=self.width / 2, font_size=20, multiline=True)
+        arcade.draw_text(heb("זה הכל, תודה ששיחקתם!"), self.width * 2 / 5, self.height / 2, width=self.width / 2, font_size=20, multiline=True)
 
     def _draw_score(self):
         arcade.draw_text(" {}".format(self._score), 300, self.height - 100)
@@ -326,6 +326,12 @@ class Pirates(arcade.Window):
         self._location_y = self._stage.boat_init_params.location_y
         self._sail_angle = self._stage.boat_init_params.sail_angel
         self._sail_openness = self._stage.boat_init_params.sail_openness
+        self._wave_x_coords = np.arange(0, self._stage.map_width, self._wave_margin)
+        self._wave_y_coords = np.arange(0, self._stage.map_height, self._wave_margin)
+        self._litters = []
+        self._last_spawn_time = 0
+        self._last_collect_time = 0
+        self._score = 0
         self._is_started = True
 
     def _end_stage(self):
@@ -347,30 +353,81 @@ class Pirates(arcade.Window):
     def is_at_the_end_of_horizontal_stage(self):
         return self._location_x > self._stage.map_width * 9 / 10
 
+    def is_at_the_end_of_vertical_stage(self):
+        return self._location_y > self._stage.map_height * 9 / 10
+
+    def is_at_the_start_of_horizontal_stage(self):
+        return self._location_x < self._stage.map_width / 10
+
+    def is_score_enough(self):
+        return self._score >= 1000
+
 
 def main():
     stage1_texts = [
-        OnscreenText("Use the left and right arrows to move the sail", -SCREEN_WIDTH / 10, SCREEN_HEIGHT * 2.3 / 4, 20),
-        OnscreenText("There you go, keep going!", SCREEN_WIDTH * 2, SCREEN_HEIGHT * 2.3 / 4, 20),
+        OnscreenText(heb("השתמשו בחצים ימינה ושמאלה כדי להזיז את המפרש"), -SCREEN_WIDTH / 10, SCREEN_HEIGHT * 2.3 / 4, 20),
+        OnscreenText(heb("יופי! המשיכו הלאה!"), SCREEN_WIDTH * 2, SCREEN_HEIGHT * 2.3 / 4, 20),
     ]
     stage1 = Stage(SCREEN_WIDTH * 4, SCREEN_HEIGHT / 2, BoatInitParams(SCREEN_WIDTH / 10, SCREEN_HEIGHT / 4), False,
-                    False, "Welcome to the game!\nPress space to start", stage1_texts,
+                    False, heb("ברוכים הבאים למשחק!", "במשחק זה תלמדו להשיט סירת מפרש", "לחצו רווח כדי להתחיל"), stage1_texts,
                     Pirates.is_at_the_end_of_horizontal_stage)
     stage2_texts = [
-        OnscreenText("Use the up and down arrows to open/close the sail", -SCREEN_WIDTH / 10, SCREEN_HEIGHT * 2.3 / 4, 20),
+        OnscreenText(heb("השתמשו בחצים למעלה ולמטה כדי לפתוח/לסגור את המפרש"), -SCREEN_WIDTH / 10, SCREEN_HEIGHT * 2.3 / 4, 20),
     ]
     stage2 = Stage(SCREEN_WIDTH * 3, SCREEN_HEIGHT / 2, BoatInitParams(SCREEN_WIDTH / 10, SCREEN_HEIGHT / 4, 0, math.pi / 2),
-                   False, False, "Well done!\nPress space to go to the next stage", stage2_texts,
+                   False, False, heb("כל הכבוד!", "לחצו רווח כדי להמשיך לשלב הבא"), stage2_texts,
                    Pirates.is_at_the_end_of_horizontal_stage)
     stage3_texts = [
-        OnscreenText("Use A and D to move the fin", -SCREEN_WIDTH / 10, SCREEN_HEIGHT * 2.3 / 4, 20),
-        OnscreenText("Try to collect the litter!", SCREEN_WIDTH * 1.5, SCREEN_HEIGHT * 2.3 / 4, 20),
+        OnscreenText(heb("לחצו על A ו-D כדי להזיז את הסנפיר"), -SCREEN_WIDTH / 10, SCREEN_HEIGHT * 2.3 / 4, 20),
+        OnscreenText(heb("נסו לאסוף את הליכלוך!"), SCREEN_WIDTH * 1.5, SCREEN_HEIGHT * 2.3 / 4, 20),
     ]
     stage3 = Stage(SCREEN_WIDTH * 6, SCREEN_HEIGHT / 2, BoatInitParams(SCREEN_WIDTH / 10, SCREEN_HEIGHT / 4), True,
-                   True, "Noice!\nNow we'll introduce another part of the boat: the fin", stage3_texts,
+                   True, heb("אחלה!", "עכשיו נכיר חלק נוסף של הסירה: הסנפיר"), stage3_texts,
                    Pirates.is_at_the_end_of_horizontal_stage, 1.5)
-    game = Pirates(SCREEN_WIDTH, SCREEN_HEIGHT, [stage1, stage2, stage3])
+    stage4_texts = [
+        OnscreenText(heb("נסו לזוז למעלה!",
+                     "מקמו את הסנפיר למטה, ",
+                     # Since the text is reversed, we write 54 so it'll be written as 45
+                     "ושימו את המפרש בזווית של 54 מעלות עם הרוח"),
+                     0, -SCREEN_HEIGHT / 8, 20, multiline=True, width=SCREEN_WIDTH / 2),
+        OnscreenText(heb("אתם על זה!"), SCREEN_WIDTH * 4 / 10, SCREEN_HEIGHT * 1.5, 20),
+    ]
+    stage4 = Stage(SCREEN_WIDTH / 3, SCREEN_HEIGHT * 3, BoatInitParams(SCREEN_WIDTH / 6, SCREEN_HEIGHT / 10), True,
+                   False, heb("לזוז בכוון הרוח זה קל", "עכשיו ננסה לזוז במאונך לרוח"), stage4_texts,
+                   Pirates.is_at_the_end_of_vertical_stage)
+    stage5_texts = [
+        OnscreenText(heb("מקמו את הסנפיר למטה, ",
+                         # Since the text is reversed, we write 54 so it'll be written as 45
+                         "ושימו את המפרש בזווית של 54 מעלות עם הרוח"),
+                     0, -SCREEN_HEIGHT / 8, 20, multiline=True, width=SCREEN_WIDTH / 2),
+        OnscreenText(heb("השתמשו בסנפיר כדי לכוון"), SCREEN_WIDTH * 4 / 10, SCREEN_HEIGHT * 1.5, 20),
+    ]
+    stage5 = Stage(SCREEN_WIDTH / 3, SCREEN_HEIGHT * 6, BoatInitParams(SCREEN_WIDTH / 6, SCREEN_HEIGHT / 10), True,
+                   True, heb("יפה מאוד!", "עכשיו נסו לאסוף לכלוך תוך כדי"), stage5_texts,
+                   Pirates.is_at_the_end_of_vertical_stage, 1.5)
+    stage6_texts = [
+        OnscreenText(heb("נסו לעלות לרוח!",
+                         "תוך כדי שאתם זזים למעלה כמו שלמדתם,",
+                         "הזיזו את הסנפיר מעט ימינה"),
+                     SCREEN_WIDTH * 2, 0, 20, multiline=True, width=SCREEN_WIDTH / 2),
+        OnscreenText(heb("נסו לעלות לרוח!",
+                         "תוך כדי שאתם זזים למטה כמו שלמדתם,",
+                         "הזיזו את הסנפיר מעט שמאלה"),
+                     SCREEN_WIDTH * 2, SCREEN_HEIGHT, 20, multiline=True, width=SCREEN_WIDTH / 2),
+        OnscreenText(heb("לא להתייאש, אתם כמעט שם!"), SCREEN_WIDTH, SCREEN_HEIGHT / 2, 20, color=arcade.color.BLACK)
+    ]
+    stage6 = Stage(SCREEN_WIDTH * 2, SCREEN_HEIGHT, BoatInitParams(SCREEN_WIDTH * 1.9, SCREEN_HEIGHT / 10), True,
+                   False, heb("מעולה!", "עכשיו ננסה לזוז כנגד הרוח"), stage6_texts,
+                   Pirates.is_at_the_start_of_horizontal_stage)
+    stage7 = Stage(SCREEN_WIDTH * 2, SCREEN_HEIGHT * 2, BoatInitParams(SCREEN_WIDTH, SCREEN_HEIGHT), True,
+                   True, heb("מדהים! אתם מלחים של ממש עכשיו", "בשלב הבא נסו לאסוף כמה שיותר לכלוך"), [],
+                   Pirates.is_score_enough, 7)
+    game = Pirates(SCREEN_WIDTH, SCREEN_HEIGHT, [stage1, stage2, stage3, stage4, stage5, stage6, stage7])
     arcade.run()
+
+
+def heb(*texts):
+    return "\n".join("".join(reversed(text)) for text in texts)
 
 
 if __name__ == "__main__":
